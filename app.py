@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, send_file
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from datetime import datetime
@@ -106,15 +106,29 @@ def import_students():
   wb = openpyxl.load_workbook(file)
   sheet = wb.active
   for row in sheet.iter_rows(min_row=2, values_only=True):
-    if type(row[6]).__name__ == "datetime":
-      dt = row[6].strftime("%Y-%m-%d")
-      e_date = str_to_date(dt)
-    elif type(row[6]).__name__ == "date":
-      e_date = str_to_date(row[6])
-    student = Student(name=row[0],age=row[1],gender=row[2],email=row[3],phone=row[4],course=row[5],enrollment_date=e_date,city=row[7],grade=row[8])
-    db.session.add(student)
-  db.session.commit()
+    if all(row):
+      if type(row[6]).__name__ == "datetime":
+        dt = row[6].strftime("%Y-%m-%d")
+        e_date = str_to_date(dt)
+      elif type(row[6]).__name__ == "str":
+        e_date = str_to_date(row[6])
+      student = Student(name=row[0],age=row[1],gender=row[2],email=row[3],phone=str(int(row[4])),course=row[5],enrollment_date=e_date,city=row[7],grade=row[8])
+      db.session.add(student)
+    db.session.commit()
   return jsonify({"message":"excel file imported successfully"})
+
+# export students as excel file
+@app.route("/students/export", methods=["GET"])
+def export_students():
+  students = Student.query.all()
+  wb = openpyxl.Workbook()
+  sheet = wb.active
+  sheet.append(["Name","Age","Gender","Email","Phone","Course","Enrollment_date","City","Grade"])
+  for s in students:
+    sheet.append([s.name, s.age, s.gender, s.email, s.phone, s.course, (s.enrollment_date).strftime("%d/%m/%Y"), s.city, s.grade])
+  filename = "Students.xlsx"
+  wb.save(filename=filename)
+  return send_file(filename, as_attachment=True)
 
 # app run
 if __name__ == "__main__":
