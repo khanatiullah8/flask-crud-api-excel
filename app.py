@@ -2,6 +2,7 @@ from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from datetime import datetime
+import openpyxl
 
 # app init
 app = Flask(__name__)
@@ -38,6 +39,12 @@ class StudentSchema(ma.Schema):
 student_schema = StudentSchema()
 students_schema = StudentSchema(many=True)
 
+
+# utility function
+def str_to_date(value):
+  return datetime.strptime(value, "%Y-%m-%d").date()
+
+
 # routes
 @app.route("/")
 def home():
@@ -60,7 +67,7 @@ def get_student(student_id):
 def add_students():
   temp_data = request.get_json()
   data = student_schema.load(temp_data)
-  data["enrollment_date"] = datetime.strptime(data["enrollment_date"], "%Y-%m-%d").date()
+  data["enrollment_date"] = str_to_date(data["enrollment_date"])
   student = Student(**data)
   db.session.add(student)
   db.session.commit()
@@ -78,7 +85,7 @@ def update_student(student_id):
   student.phone = data.get("phone") or student.phone
   student.course = data.get("course") or student.course
   if data.get("enrollment_date"):
-    student.enrollment_date = datetime.strptime(data.get("enrollment_date"), "%Y-%m-%d").date()
+    student.enrollment_date = str_to_date(data["enrollment_date"])
   student.city = data.get("city") or student.city
   student.grade = data.get("grade") or student.grade
   db.session.commit()
@@ -95,6 +102,18 @@ def delete_student(student_id):
 # add/import students from excel file
 @app.route("/students/import", methods=["POST"])
 def import_students():
+  file = request.files["file"]
+  wb = openpyxl.load_workbook(file)
+  sheet = wb.active
+  for row in sheet.iter_rows(min_row=2, values_only=True):
+    if type(row[6]).__name__ == "datetime":
+      dt = row[6].strftime("%Y-%m-%d")
+      e_date = str_to_date(dt)
+    elif type(row[6]).__name__ == "date":
+      e_date = str_to_date(row[6])
+    student = Student(name=row[0],age=row[1],gender=row[2],email=row[3],phone=row[4],course=row[5],enrollment_date=e_date,city=row[7],grade=row[8])
+    db.session.add(student)
+  db.session.commit()
   return jsonify({"message":"excel file imported successfully"})
 
 # app run
